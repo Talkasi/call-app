@@ -20,4 +20,4 @@ def camera(path="/dev/video0", resolution=(1280, 720), window_name="call-app"):
         for event_item in pg_event.get():
             if event_item.type == pygame.QUIT:
                 pygame.quit()
-                return 1
+                return
