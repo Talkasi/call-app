@@ -1,18 +1,26 @@
-import cv2 as cv
+import pygame.camera
+import pygame.event as pg_event
+
+resolution = (1280, 720)
+camera_path = "/dev/video0"
 
 
-def camera():
-    cap = cv.VideoCapture(0)
+def camera(camera_path):
+    pygame.init()
+    pygame.camera.init()
 
+    cam = pygame.camera.Camera(camera_path, resolution)
+    cam.start()
+    window = pygame.display.set_mode(resolution)
     while True:
-        ret, frame = cap.read()
-        cv.imshow('Video', frame)
+        image = cam.get_image()
 
-        if cv.waitKey(1) == 27:
-            break
+        pygame.display.set_caption('video')
 
-    cap.release()
-    cv.destroyAllWindows()
+        window.blit(image, (0, 0))
+        pygame.display.flip()
 
-
-camera()
+        for event_item in pg_event.get():
+            if event_item.type == pygame.QUIT:
+                pygame.quit()
+                return 1
