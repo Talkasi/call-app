@@ -1,21 +1,18 @@
 import pygame.camera
 import pygame.event as pg_event
 
-resolution = (1280, 720)
-camera_path = "/dev/video0"
 
-
-def camera(camera_path):
+def camera(path="/dev/video0", resolution=(1280, 720), window_name="call-app"):
     pygame.init()
     pygame.camera.init()
 
-    cam = pygame.camera.Camera(camera_path, resolution)
+    cam = pygame.camera.Camera(path, resolution)
     cam.start()
     window = pygame.display.set_mode(resolution)
     while True:
         image = cam.get_image()
 
-        pygame.display.set_caption('video')
+        pygame.display.set_caption(window_name)
 
         window.blit(image, (0, 0))
         pygame.display.flip()
