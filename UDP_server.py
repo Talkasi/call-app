@@ -17,7 +17,7 @@ while True:
     data, addr = server.recvfrom(2764800)
     data = zlib.decompress(data).decode("ascii")
 
-    camera_image = pygame.image.fromstring(data, (1280, 720), 'RGBA')
+    camera_image = pygame.image.fromstring(data, (1280, 720), 'RGB')
 
     if camera.camera_print_image(camera_image, window_display) == 0:
         break
