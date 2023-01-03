@@ -13,12 +13,16 @@ def init(channels: int = 1, blocksize: int = 256):
     global outstream
     global log
 
+    assert not instream
+    assert not outstream
+    assert not log
+
     instream = sd.RawInputStream(blocksize=blocksize, channels=channels)
     outstream = sd.RawOutputStream(samplerate=instream.samplerate,
                                    blocksize=blocksize,
                                    channels=channels)
 
-    log = logging.getLogger("Microphone")
+    log = logging.getLogger("Sound")
 
 
 def read_from_device(nframes=None):

@@ -12,6 +12,8 @@ root_logger = None
 def init():
     global root_logger
 
+    assert not root_logger
+
     level = logging.DEBUG if os.getenv("DEBUG") else logging.INFO
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
