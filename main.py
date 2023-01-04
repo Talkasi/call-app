@@ -34,7 +34,7 @@ def receive_play(sock):
         logger.root_logger.warning(e)
 
 
-def start_threads(sock):
+def start_join_threads(sock):
     read_send_thread = Thread(target=read_send, args=(sock, ))
     receive_play_thread = Thread(target=receive_play, args=(sock, ))
 
@@ -53,12 +53,12 @@ def server(addr):
         peer_addr = tcp.get_addr(peer_host, peer_port)
         tcp.log.info(f"Accepted from {peer_addr}")
 
-        start_threads(peer_sock)
+        start_join_threads(peer_sock)
 
 
 def client(addr):
     sock = tcp.dial(addr)
-    start_threads(sock)
+    start_join_threads(sock)
 
 
 def main():
