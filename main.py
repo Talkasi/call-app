@@ -55,6 +55,11 @@ def start_join_threads(sock):
     read_send_thread.join()
     receive_play_thread.join()
 
+    # NOTE: stop steams so no further data is buffered.
+    # They will be started back automatically after first read.
+    snd.instream.stop()
+    snd.outstream.stop()
+
 
 def server(addr):
     sock = tcp.listen(addr)
