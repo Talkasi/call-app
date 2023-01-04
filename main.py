@@ -17,7 +17,11 @@ def read_send(sock):
             # > match this parameter to the blocksize parameter used
             # > when opening the stream.
             samples = snd.read_from_device(snd.instream.blocksize)
-            sock.send(samples)
+
+            sent = 0
+            while sent < len(samples):
+                sent += sock.send(samples[sent:])
+
             logger.root_logger.debug(f"Read and sent {len(samples)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
@@ -26,7 +30,10 @@ def read_send(sock):
 def receive_play(sock):
     try:
         while True:
-            samples = sock.recv(snd.outstream.blocksize)
+            samples = b""
+            while len(samples) < snd.outstream.blocksize:
+                received = sock.recv(snd.outstream.blocksize)
+                samples += received
             snd.write_to_device(samples)
             logger.root_logger.debug(
                 f"Received and played {len(samples)} bytes")
