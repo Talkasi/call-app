@@ -33,16 +33,14 @@ def receive_play(sock):
     try:
         while True:
             samples = b""
-            while len(samples) < snd.outstream.blocksize:
+            while len(samples) < buffer_size:
                 samples += sock.recv(buffer_size - len(samples))
 
-            played = 0
-            while played < len(samples):
-             snd.write_to_device(samples[played::snd.outstream.blocksize])
-             played += snd.outstream.blocksize
+            snd.write_to_device(samples)
 
             logger.root_logger.debug(
                 f"Received and played {len(samples)} bytes")
+
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
