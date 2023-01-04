@@ -3,7 +3,29 @@ import os
 import sound as snd
 import tcp
 
-if __name__ == "__main__":
+from threading import Thread
+
+
+def read_send(sock):
+    while True:
+        # NOTE: from the documentation:
+        # > nframes parameter is not constrained to a specific range,
+        # > however high performance applications will want to
+        # > match this parameter to the blocksize parameter used
+        # > when opening the stream.
+        samples = snd.read_from_device(snd.instream.blocksize)
+        sock.send(samples)
+        logger.root_logger.debug(f"Read and sent {len(samples)} bytes")
+
+
+def receive_play(sock):
+    while True:
+        samples = sock.recv(snd.outstream.blocksize)
+        snd.write_to_device(samples)
+        logger.root_logger.debug(f"Received and played {len(samples)} bytes")
+
+
+def main():
     logger.init()
     snd.init()
     tcp.init()
@@ -20,17 +42,15 @@ if __name__ == "__main__":
             "cannot proceed without role; specify 'SERVER' or 'CLIENT'.")
         exit(1)
 
-    while True:
-        # NOTE: from the documentation:
-        # > nframes parameter is not constrained to a specific range,
-        # > however high performance applications will want to
-        # > match this parameter to the blocksize parameter used
-        # > when opening the stream.
+    read_send_thread = Thread(target=read_send, args=(sock, ))
+    receive_play_thread = Thread(target=receive_play, args=(sock, ))
 
-        # TODO: make read and write for both
-        if os.getenv("SERVER"):
-            samples = snd.read_from_device(snd.instream.blocksize)
-            sock.send(samples)
-        else:
-            samples = sock.recv(snd.outstream.blocksize)
-            snd.write_to_device(samples)
+    read_send_thread.start()
+    receive_play_thread.start()
+
+    read_send_thread.join()
+    receive_play_thread.join()
+
+
+if __name__ == "__main__":
+    main()
