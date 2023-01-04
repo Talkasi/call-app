@@ -1,11 +1,11 @@
 import argparse
 import logger
-import logging
-import os
 import sound as snd
 import tcp
 
 from threading import Thread
+
+buffer_size = None
 
 
 def read_send(sock):
@@ -16,13 +16,15 @@ def read_send(sock):
             # > however high performance applications will want to
             # > match this parameter to the blocksize parameter used
             # > when opening the stream.
-            samples = snd.read_from_device(snd.instream.blocksize)
+            samples = b""
+            while len(samples) < buffer_size:
+                samples += snd.read_from_device(snd.instream.blocksize)
 
             sent = 0
             while sent < len(samples):
                 sent += sock.send(samples[sent:])
 
-            # logger.root_logger.debug(f"Read and sent {len(samples)} bytes")
+            logger.root_logger.debug(f"Read and sent {len(samples)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
@@ -34,9 +36,11 @@ def receive_play(sock):
             while len(samples) < snd.outstream.blocksize:
                 received = sock.recv(snd.outstream.blocksize - len(samples))
                 samples += received
+
+            snd.write_to_device(samples)
+
             logger.root_logger.debug(
                 f"Received and played {len(samples)} bytes")
-            snd.write_to_device(samples)
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
@@ -80,15 +84,18 @@ def main():
         default=client,
         const=server,
         help="listen on the specified address instead of making connection")
-    argparser.add_argument('-v',
-                           '--verbose',
-                           action='store_true',
+    argparser.add_argument("-v",
+                           "--verbose",
+                           action="store_true",
                            help="enable debug logs")
     args = argparser.parse_args()
 
     logger.init(args.verbose)
     snd.init()
     tcp.init()
+
+    global buffer_size
+    buffer_size = snd.instream.blocksize * 2 * 10  # NOTE: 10 kiB
 
     # NOTE: calling server or client function depending on provided arguments.
     try:
