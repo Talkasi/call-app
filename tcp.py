@@ -16,7 +16,7 @@ def get_host_port(addr: str) -> (str, int):
     addr_parts = addr.split(":")
     if len(addr_parts) == 1:
         # NOTE: adding default port value.
-        addr_parts.append(1234)
+        addr_parts.append(str(1234))
     assert len(addr_parts) == 2
 
     return addr_parts[0], int(addr_parts[1])
