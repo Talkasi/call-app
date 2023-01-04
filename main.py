@@ -95,7 +95,7 @@ def main():
     tcp.init()
 
     global buffer_size
-    buffer_size = snd.instream.blocksize * 2 * 10  # NOTE: 10 kiB
+    buffer_size = snd.instream.blocksize * 2 * 4  # NOTE: 4 kiB
 
     # NOTE: calling server or client function depending on provided arguments.
     try:
