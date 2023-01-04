@@ -9,12 +9,12 @@ import os
 root_logger = None
 
 
-def init():
+def init(verbose: bool):
     global root_logger
 
     assert not root_logger
 
-    level = logging.DEBUG if os.getenv("DEBUG") else logging.INFO
+    level = logging.DEBUG if verbose else logging.INFO
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
 
