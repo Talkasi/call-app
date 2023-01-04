@@ -8,7 +8,7 @@ outstream = None
 log = None
 
 
-def init(channels: int = 1, blocksize: int = 256):
+def init(channels: int = 1, blocksize: int = 512):
     global instream
     global outstream
     global log

@@ -1,5 +1,4 @@
 import logging
-import os
 
 # NOTE: following must be initialized before using!
 # Call `init()` for that.
@@ -19,7 +18,7 @@ def init(verbose: bool):
     root_logger.setLevel(level)
 
     formatter = logging.Formatter(
-        '%(asctime)s %(levelname)s [%(name)s] %(message)s')
+        "%(asctime)s %(levelname)s [%(name)s] %(message)s")
 
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)

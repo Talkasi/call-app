@@ -9,7 +9,7 @@ def init():
 
     assert not log
 
-    log = logging.getLogger('TCP')
+    log = logging.getLogger("TCP")
 
 
 def get_host_port(addr: str) -> (str, int):
