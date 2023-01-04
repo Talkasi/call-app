@@ -34,10 +34,12 @@ def receive_play(sock):
         while True:
             samples = b""
             while len(samples) < snd.outstream.blocksize:
-                received = sock.recv(buffer_size - len(samples))
-                samples += received
+                samples += sock.recv(buffer_size - len(samples))
 
-            snd.write_to_device(samples)
+            played = 0
+            while played < len(samples):
+             snd.write_to_device(samples[played::snd.outstream.blocksize])
+             played += snd.outstream.blocksize
 
             logger.root_logger.debug(
                 f"Received and played {len(samples)} bytes")
