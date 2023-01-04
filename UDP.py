@@ -12,7 +12,7 @@ MAX_PACK = 65507
 
 
 def get_and_send_data(sock):
-    sock.send(1)
+    sock.send(bytes(1))
     cam = camera.camera_init()
 
     while True:
@@ -74,5 +74,11 @@ else:
     # Bind server
     sock.bind((UDP_IP, UDP_PORT))
 
-threading.Thread(target=receive_and_play_data, args=(sock, ))
-threading.Thread(target=get_and_send_data, args=(sock, ))
+s = threading.Thread(target=receive_and_play_data, args=(sock, ))
+d = threading.Thread(target=get_and_send_data, args=(sock, ))
+
+s.start()
+d.start()
+
+s.join()
+d.join()
