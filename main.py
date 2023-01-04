@@ -34,7 +34,7 @@ def receive_play(sock):
         while True:
             samples = b""
             while len(samples) < snd.outstream.blocksize:
-                received = sock.recv(snd.outstream.blocksize - len(samples))
+                received = sock.recv(buffer_size - len(samples))
                 samples += received
 
             snd.write_to_device(samples)
