@@ -25,7 +25,6 @@ def camera_print_image(image, window_display, window_name="call-app"):
 
     return 1
 
-
 # Working stuff
 
 # window_display = pygame.display.set_mode((1280, 720))
