@@ -2,7 +2,6 @@ import argparse
 import sound as snd
 import tcp
 import udp
-
 import logger
 import pygame.image
 import camera
@@ -10,7 +9,7 @@ from threading import Thread
 
 buffer_size = None
 
-CHUNK_SIZE = 16
+CHUNK_SIZE = 16 * 3
 
 
 def get_and_send_data(sock):
@@ -89,19 +88,22 @@ def receive_play(sock):
         logger.root_logger.warning(e)
 
 
-def start_join_threads(sock):
-    read_send_thread = Thread(target=read_send, args=(sock,))
-    receive_play_thread = Thread(target=receive_play, args=(sock,))
-    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock,))
-    get_and_send_thread = Thread(target=get_and_send_data, args=(sock,))
+def start_join_threads(sock_tcp, sock_udp):
+    read_send_thread = Thread(target=read_send, args=(sock_tcp,))
+    receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
+
+    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp,))
+    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp,))
 
     read_send_thread.start()
     receive_play_thread.start()
+
     receive_and_play_thread.start()
     get_and_send_thread.start()
 
     read_send_thread.join()
     receive_play_thread.join()
+
     receive_and_play_thread.join()
     get_and_send_thread.join()
 
@@ -120,21 +122,18 @@ def server(addr):
         peer_addr_tcp = tcp.get_addr(peer_host_tcp, peer_port_tcp)
         tcp.log.info(f"Accepted from {peer_addr_tcp}")
 
-        start_join_threads(peer_sock_tcp)
-
         peer_sock_udp, (peer_host_udp, peer_port_udp) = sock_udp.accept()
         peer_addr_udp = udp.get_addr(peer_host_udp, peer_port_udp)
         udp.log.info(f"Accepted from {peer_addr_udp}")
 
-        start_join_threads(peer_sock_udp)
+        start_join_threads(peer_sock_tcp, peer_sock_udp)
 
 
 def client(addr):
     sock_tcp = tcp.dial(addr)
-    start_join_threads(sock_tcp)
-
     sock_udp = udp.dial(addr)
-    start_join_threads(sock_udp)
+
+    start_join_threads(sock_tcp, sock_udp)
 
 
 def main():
