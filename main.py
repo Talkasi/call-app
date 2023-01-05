@@ -39,6 +39,7 @@ def receive_and_play_data(sock, resolution=(1280, 720)):
             data = b""
             while size_received < resolution[0] * resolution[1] * 3:  # Size of an image
                 data += sock.recv(CHUNK_SIZE)
+                size_received += CHUNK_SIZE
 
             camera_image = pygame.image.fromstring(str(data), resolution, 'RGB')
 
