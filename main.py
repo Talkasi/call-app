@@ -23,9 +23,10 @@ def get_and_send_data(sock):
 
             sent_size = 0
             while sent_size < len(data):
-                sock.send(data[sent_size:sent_size + CHUNK_SIZE])
-                sent_size += CHUNK_SIZE
+                sent_size += sock.send(data[sent_size:sent_size + CHUNK_SIZE])
+                print("Sent", data[sent_size:sent_size + CHUNK_SIZE], len(data[sent_size:sent_size + CHUNK_SIZE]))
 
+            print("Send")
             logger.root_logger.debug(f"Got and sent {len(data)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
@@ -38,9 +39,12 @@ def receive_and_play_data(sock, resolution=(1280, 720)):
             size_received = 0
             data = b""
             while size_received < resolution[0] * resolution[1] * 3:  # Size of an image
+                print("Received 1", sock.recv(CHUNK_SIZE))
                 data += sock.recv(CHUNK_SIZE)
+                print("Received 2", data)
                 size_received += CHUNK_SIZE
 
+            print("Receive")
             camera_image = pygame.image.fromstring(str(data), resolution, 'RGB')
 
             logger.root_logger.debug(f"Received and played {len(data)} bytes")
@@ -123,11 +127,7 @@ def server(addr):
         peer_addr_tcp = tcp.get_addr(peer_host_tcp, peer_port_tcp)
         tcp.log.info(f"Accepted from {peer_addr_tcp}")
 
-        peer_sock_udp, (peer_host_udp, peer_port_udp) = sock_udp.accept()
-        peer_addr_udp = udp.get_addr(peer_host_udp, peer_port_udp)
-        udp.log.info(f"Accepted from {peer_addr_udp}")
-
-        start_join_threads(peer_sock_tcp, peer_sock_udp)
+        start_join_threads(peer_sock_tcp, sock_udp)
 
 
 def client(addr):
