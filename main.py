@@ -22,6 +22,9 @@ def get_and_send_data(sock):
 
             data = bytes(list(pygame.image.tostring(camera_image, 'RGB')))
 
+            while address is None:
+                pass
+
             sent_size = 0
             while sent_size < len(data):
                 sent_size += sock.sendto(data[sent_size:sent_size + CHUNK_SIZE], address)
@@ -33,6 +36,8 @@ def get_and_send_data(sock):
 
 
 def receive_and_play_data(sock, resolution=(1280, 720)):
+    global address
+
     window_display = pygame.display.set_mode(resolution)
     try:
         while True:
@@ -126,7 +131,7 @@ def server(addr):
         tcp.log.info(f"Accepted from {peer_addr_tcp}")
 
         global address
-        address = peer_addr_tcp[-4:] + "4321"
+        address = (peer_addr_tcp[-4:], "4321")
 
         start_join_threads(peer_sock_tcp, sock_udp)
 
