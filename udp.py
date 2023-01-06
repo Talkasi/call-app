@@ -35,6 +35,7 @@ def listen(addr="127.0.0.1:4321"):
     addr = get_addr(host, port)
 
     sock.bind((host, port))
+    sock.connect((host, port))
 
     log.info(f"Listening on {addr}")
     return sock

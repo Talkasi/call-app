@@ -8,7 +8,6 @@ import camera
 from threading import Thread
 
 buffer_size = None
-address = None
 
 CHUNK_SIZE = 16 * 3
 
@@ -22,35 +21,29 @@ def get_and_send_data(sock):
 
             data = bytes(list(pygame.image.tostring(camera_image, 'RGB')))
 
-            while address is None:
-                pass
-
             sent_size = 0
             while sent_size < len(data):
-                sent_size += sock.sendto(data[sent_size:sent_size + CHUNK_SIZE], address)
+                sent_size += sock.send(data[sent_size:sent_size + CHUNK_SIZE])
                 # print("Sent", data[sent_size:sent_size + CHUNK_SIZE], len(data[sent_size:sent_size + CHUNK_SIZE]))
 
-            logger.root_logger.debug(f"Got and sent {len(data)} bytes")
+            logger.root_logger.debug(f"Camera. Got and sent {len(data)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
 
 def receive_and_play_data(sock, resolution=(1280, 720)):
-    global address
-
     window_display = pygame.display.set_mode(resolution)
     try:
         while True:
             size_received = 0
             data = b""
             while size_received < resolution[0] * resolution[1] * 3:  # Size of an image
-                data_got, address = sock.recvfrom(CHUNK_SIZE)
-                data += data_got
+                data += sock.recv(CHUNK_SIZE)
                 size_received += CHUNK_SIZE
 
             camera_image = pygame.image.fromstring(str(data), resolution, 'RGB')
 
-            logger.root_logger.debug(f"Received and played {len(data)} bytes")
+            logger.root_logger.debug(f"Camera. Received and played {len(data)} bytes")
 
             if camera.camera_print_image(camera_image, window_display) == 0:
                 pass
@@ -75,7 +68,7 @@ def read_send(sock):
             while sent < len(samples):
                 sent += sock.send(samples[sent:])
 
-            logger.root_logger.debug(f"Read and sent {len(samples)} bytes")
+            logger.root_logger.debug(f"Sound. Read and sent {len(samples)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
@@ -90,7 +83,7 @@ def receive_play(sock):
             snd.write_to_device(samples)
 
             logger.root_logger.debug(
-                f"Received and played {len(samples)} bytes")
+                f"Sound. Received and played {len(samples)} bytes")
 
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
@@ -129,9 +122,6 @@ def server(addr):
         peer_sock_tcp, (peer_host_tcp, peer_port_tcp) = sock_tcp.accept()
         peer_addr_tcp = tcp.get_addr(peer_host_tcp, peer_port_tcp)
         tcp.log.info(f"Accepted from {peer_addr_tcp}")
-
-        global address
-        address = (peer_addr_tcp[-4:], "4321")
 
         start_join_threads(peer_sock_tcp, sock_udp)
 
