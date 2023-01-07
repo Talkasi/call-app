@@ -1,15 +1,14 @@
 import argparse
-import sound as snd
-import tcp
-import udp
 import logger
+import sound as snd
 import pygame.image
 import camera
+import tcp
+import udp
 from threading import Thread
 
 buffer_size = None
-
-CHUNK_SIZE = 16 * 3
+CHUNK_SIZE = 51200
 
 
 def get_and_send_data(sock):
@@ -18,39 +17,36 @@ def get_and_send_data(sock):
     try:
         while True:
             camera_image = cam.get_image()
-
-            data = bytes(list(pygame.image.tostring(camera_image, 'RGB')))
+            data = pygame.image.tostring(camera_image, 'RGB')
 
             sent_size = 0
             while sent_size < len(data):
                 sent_size += sock.send(data[sent_size:sent_size + CHUNK_SIZE])
-                # print("Sent", data[sent_size:sent_size + CHUNK_SIZE], len(data[sent_size:sent_size + CHUNK_SIZE]))
 
             logger.root_logger.debug(f"Camera. Got and sent {len(data)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
 
-def receive_and_play_data(sock, resolution=(1280, 720)):
+def receive_and_play_data(sock, pack=b'', resolution=(1280, 720)):
     window_display = pygame.display.set_mode(resolution)
+
     try:
         while True:
-            size_received = 0
-            data = b""
-            while size_received < resolution[0] * resolution[1] * 3:  # Size of an image
-                data_received = sock.recv(CHUNK_SIZE)
-                if len(data_received) != CHUNK_SIZE:
-                    data_received = data_received + b'\x00' * (CHUNK_SIZE - data_received)
-                data += data_received
-                size_received += CHUNK_SIZE
+            data = b''
+            if len(pack) != 0:
+                data += pack
+                pack = b''
 
-            camera_image = pygame.image.fromstring(str(data), resolution, 'RGB')
+            while len(data) < resolution[0] * resolution[1] * 3:  # Size of an image
+                data += sock.recv(CHUNK_SIZE)
 
-            logger.root_logger.debug(f"Camera. Received and played {len(data)} bytes")
-
+            camera_image = pygame.image.fromstring(data, resolution, 'RGB')
             if camera.camera_print_image(camera_image, window_display) == 0:
                 pass
                 # return
+
+            logger.root_logger.debug(f"Camera. Received and played {len(data)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
@@ -63,7 +59,7 @@ def read_send(sock):
             # > however high performance applications will want to
             # > match this parameter to the blocksize parameter used
             # > when opening the stream.
-            samples = b""
+            samples = b''
             while len(samples) < buffer_size:
                 samples += snd.read_from_device(snd.instream.blocksize)
 
@@ -79,7 +75,7 @@ def read_send(sock):
 def receive_play(sock):
     try:
         while True:
-            samples = b""
+            samples = b''
             while len(samples) < buffer_size:
                 samples += sock.recv(buffer_size - len(samples))
 
@@ -92,22 +88,19 @@ def receive_play(sock):
         logger.root_logger.warning(e)
 
 
-def start_join_threads(sock_tcp, sock_udp):
+def start_join_threads(sock_tcp, sock_udp, pack=b''):
     read_send_thread = Thread(target=read_send, args=(sock_tcp,))
     receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
-
-    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp,))
-    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp,))
+    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp, pack, ))
+    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp, ))
 
     read_send_thread.start()
     receive_play_thread.start()
-
     receive_and_play_thread.start()
     get_and_send_thread.start()
 
     read_send_thread.join()
     receive_play_thread.join()
-
     receive_and_play_thread.join()
     get_and_send_thread.join()
 
@@ -126,7 +119,10 @@ def server(addr):
         peer_addr_tcp = tcp.get_addr(peer_host_tcp, peer_port_tcp)
         tcp.log.info(f"Accepted from {peer_addr_tcp}")
 
-        start_join_threads(peer_sock_tcp, sock_udp)
+        data_received, address = sock_udp.recvfrom(CHUNK_SIZE)
+        sock_udp.connect(address)
+
+        start_join_threads(peer_sock_tcp, sock_udp, data_received)
 
 
 def client(addr):
