@@ -4,7 +4,6 @@ import sound as snd
 import pygame.image
 import camera
 import tcp
-import udp
 from threading import Thread
 
 buffer_size = None
@@ -28,15 +27,12 @@ def get_and_send_data(sock):
         logger.root_logger.warning(e)
 
 
-def receive_and_play_data(sock, pack=b'', resolution=(1280, 720)):
+def receive_and_play_data(sock, resolution=(1280, 720)):
     window_display = pygame.display.set_mode(resolution)
 
     try:
         while True:
             data = b''
-            if len(pack) != 0:
-                data += pack
-                pack = b''
 
             while len(data) < resolution[0] * resolution[1] * 3:  # Size of an image
                 data += sock.recv(CHUNK_SIZE)
@@ -88,11 +84,11 @@ def receive_play(sock):
         logger.root_logger.warning(e)
 
 
-def start_join_threads(sock_tcp, sock_udp, pack=b''):
-    read_send_thread = Thread(target=read_send, args=(sock_tcp,))
-    receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
-    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp, pack, ))
-    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp, ))
+def start_join_threads(sock_tcp_sound, sock_tcp_camera):
+    read_send_thread = Thread(target=read_send, args=(sock_tcp_sound, ))
+    receive_play_thread = Thread(target=receive_play, args=(sock_tcp_sound, ))
+    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_tcp_camera, ))
+    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_tcp_camera,))
 
     read_send_thread.start()
     receive_play_thread.start()
@@ -111,25 +107,26 @@ def start_join_threads(sock_tcp, sock_udp, pack=b''):
 
 
 def server(addr):
-    sock_tcp = tcp.listen(addr)
-    sock_udp = udp.listen(addr)
+    sock_tcp_sound = tcp.listen(addr, 1234)
+    sock_tcp_camera = tcp.listen(addr, 4321)
 
     while True:
-        peer_sock_tcp, (peer_host_tcp, peer_port_tcp) = sock_tcp.accept()
-        peer_addr_tcp = tcp.get_addr(peer_host_tcp, peer_port_tcp)
-        tcp.log.info(f"Accepted from {peer_addr_tcp}")
+        peer_sock_tcp_sound, (peer_host_tcp_sound, peer_port_tcp_sound) = sock_tcp_sound.accept()
+        peer_addr_tcp_sound = tcp.get_addr(peer_host_tcp_sound, peer_port_tcp_sound)
+        tcp.log.info(f"Accepted from {peer_addr_tcp_sound}")
 
-        data_received, address = sock_udp.recvfrom(CHUNK_SIZE)
-        sock_udp.connect(address)
+        peer_sock_tcp_camera, (peer_host_tcp_camera, peer_port_tcp_camera) = sock_tcp_camera.accept()
+        peer_addr_tcp_camera = tcp.get_addr(peer_host_tcp_camera, peer_port_tcp_camera)
+        tcp.log.info(f"Accepted from {peer_addr_tcp_camera}")
 
-        start_join_threads(peer_sock_tcp, sock_udp, data_received)
+        start_join_threads(peer_sock_tcp_sound, peer_sock_tcp_camera)
 
 
 def client(addr):
-    sock_tcp = tcp.dial(addr)
-    sock_udp = udp.dial(addr)
+    sock_tcp_sound = tcp.dial(addr, 1234)
+    sock_tcp_camera = tcp.dial(addr, 4321)
 
-    start_join_threads(sock_tcp, sock_udp)
+    start_join_threads(sock_tcp_sound, sock_tcp_camera)
 
 
 def main():
@@ -153,7 +150,6 @@ def main():
     logger.init(args.verbose)
     snd.init()
     tcp.init()
-    udp.init()
 
     global buffer_size
     buffer_size = snd.instream.blocksize * 2 * 4  # NOTE: 4 kiB
