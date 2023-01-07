@@ -107,13 +107,14 @@ def start_join_threads(sock_tcp_sound, sock_tcp_camera):
 
 
 def server(addr):
-    sock_tcp_sound = tcp.listen(addr, 1234)
-    sock_tcp_camera = tcp.listen(addr, 4321)
-
     while True:
+        sock_tcp_sound = tcp.listen(addr, 1234)
+
         peer_sock_tcp_sound, (peer_host_tcp_sound, peer_port_tcp_sound) = sock_tcp_sound.accept()
         peer_addr_tcp_sound = tcp.get_addr(peer_host_tcp_sound, peer_port_tcp_sound)
         tcp.log.info(f"Accepted from {peer_addr_tcp_sound}")
+
+        sock_tcp_camera = tcp.listen(addr, 4321)
 
         peer_sock_tcp_camera, (peer_host_tcp_camera, peer_port_tcp_camera) = sock_tcp_camera.accept()
         peer_addr_tcp_camera = tcp.get_addr(peer_host_tcp_camera, peer_port_tcp_camera)
