@@ -37,30 +37,24 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
             index = []
 
             if len(pack) != 0:
-                if len(pack) != CHUNK_SIZE + 1:
-                    pack = pack + b'\x00' * (CHUNK_SIZE + 1 - len(pack))
-
-                index.append(pack[0])
+                index.append(struct.unpack("i", pack[:4]))
                 data.append(pack)
                 pack = b''
 
             while len(data) < resolution[0] * resolution[1] * 3 // CHUNK_SIZE:  # Size of an image // size of the record
-                got = sock.recv(CHUNK_SIZE + 1)
+                got = sock.recv(CHUNK_SIZE + 4)
 
-                if got[0] in index:
+                if struct.unpack("i", got[:4]) in index:
                     continue
 
-                index.append(got[0])
-                if len(got) != CHUNK_SIZE + 1:
-                    got = got + b'\x00' * (CHUNK_SIZE + 1 - len(got))
-
+                index.append(struct.unpack("i", got[:4]))
                 data.append(got)
 
-            data = sorted(data, key=lambda data_item: data_item[0])
+            data = sorted(data, key=lambda data_item: struct.unpack("i", data_item[:4]))
 
             image = b''
             for i in range(len(data)):
-                image += bytes(data[i][1:])
+                image += bytes(data[i][4:])
 
             camera_image = pygame.image.fromstring(image, resolution, 'RGB')
             if camera.camera_print_image(camera_image, window_display) == 0:
@@ -139,8 +133,9 @@ def server(addr):
         peer_addr_tcp = tcp.get_addr(peer_host_tcp, peer_port_tcp)
         tcp.log.info(f"Accepted from {peer_addr_tcp}")
 
-        data_received, address = sock_udp.recvfrom(CHUNK_SIZE)
+        data_received, address = sock_udp.recvfrom(CHUNK_SIZE + 4)
         sock_udp.connect(address)
+        tcp.log.info(f"Connected to {address[0] + ':' + str(address[1])}")
 
         start_join_threads(peer_sock_tcp, sock_udp, data_received)
 
