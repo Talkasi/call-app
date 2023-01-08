@@ -9,7 +9,7 @@ import struct
 from threading import Thread
 
 buffer_size = None
-CHUNK_SIZE = 51200
+CHUNK_SIZE = 1200
 
 
 def get_and_send_data(sock):
