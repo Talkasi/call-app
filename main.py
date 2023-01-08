@@ -78,7 +78,6 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
                     continue
 
                 index.append(got[0])
-                print(len(got), got[0])
                 if len(got) != CHUNK_SIZE + 1:
                     got = got + b'\x00' * (CHUNK_SIZE + 1 - len(got))
 
@@ -86,15 +85,16 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
                     data.append(got)
 
             # Sort
-            for i in range(len(data) - 1):
-                if data[i][0] > data[i + 1][0]:
-                    tmp = data[i + 1]
-                    j = i
-
-                    while j >= 0 and data[j][0] > tmp[0]:
-                        data[j + 1] = data[j]
-                        j -= 1
-                    data[j + 1] = tmp
+            data = sorted(data, key=lambda data_item: data_item[0])
+            # for i in range(len(data) - 1):
+            #     if data[i][0] > data[i + 1][0]:
+            #         tmp = data[i + 1]
+            #         j = i
+            #
+            #         while j >= 0 and data[j][0] > tmp[0]:
+            #             data[j + 1] = data[j]
+            #             j -= 1
+            #         data[j + 1] = tmp
 
             image = b''
             for i in range(len(data)):
