@@ -6,7 +6,6 @@ import camera
 import tcp
 import udp
 import struct
-import time
 from threading import Thread
 
 buffer_size = None
@@ -21,22 +20,8 @@ def get_and_send_data(sock):
             camera_image = cam.get_image()
             data = pygame.image.tostring(camera_image, 'RGB')
 
-            # sent_size = 0
-            # while sent_size < len(data):
-            #     sent = sock.send(data[sent_size:sent_size + CHUNK_SIZE])
-            #     if sent > 0:
-            #         sent_size += sent
-            #     time.sleep(0.001)
-
-            # for i in range(640 * 480 * 3 // CHUNK_SIZE):
-            #     sock.send(data[i * CHUNK_SIZE:(i + 1) * CHUNK_SIZE])
-            #     time.sleep(0.001)
-
             for i in range(640 * 480 * 3 // CHUNK_SIZE):
                 sock.send(b''.join([struct.pack("i", i), data[i * CHUNK_SIZE:(i + 1) * CHUNK_SIZE]]))
-                time.sleep(0.0015)
-
-            # time.sleep(0.005)
 
             logger.root_logger.debug(f"Camera. Got and sent {len(data)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
@@ -48,18 +33,6 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
 
     try:
         while True:
-            # data = b''
-            # if len(pack) != 0:
-            #     data += pack
-            #     pack = b''
-
-            # while len(data) < resolution[0] * resolution[1] * 3:  # Size of an image
-            #     data += sock.recv(CHUNK_SIZE)
-            #     time.sleep(0.001)
-
-            # for i in range(resolution[0] * resolution[1] * 3 // CHUNK_SIZE - (len(data) != 0)):  # Size of an image
-            #     data += sock.recv(CHUNK_SIZE)
-
             data = []
             index = []
 
@@ -71,7 +44,7 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
                 data.append(pack)
                 pack = b''
 
-            while len(data) < resolution[0] * resolution[1] * 3 // CHUNK_SIZE:  # Size of an image
+            while len(data) < resolution[0] * resolution[1] * 3 // CHUNK_SIZE:  # Size of an image // size of the record
                 got = sock.recv(CHUNK_SIZE + 1)
 
                 if got[0] in index:
@@ -81,20 +54,9 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
                 if len(got) != CHUNK_SIZE + 1:
                     got = got + b'\x00' * (CHUNK_SIZE + 1 - len(got))
 
-                if got not in data:
-                    data.append(got)
+                data.append(got)
 
-            # Sort
             data = sorted(data, key=lambda data_item: data_item[0])
-            # for i in range(len(data) - 1):
-            #     if data[i][0] > data[i + 1][0]:
-            #         tmp = data[i + 1]
-            #         j = i
-            #
-            #         while j >= 0 and data[j][0] > tmp[0]:
-            #             data[j + 1] = data[j]
-            #             j -= 1
-            #         data[j + 1] = tmp
 
             image = b''
             for i in range(len(data)):
@@ -102,8 +64,7 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
 
             camera_image = pygame.image.fromstring(image, resolution, 'RGB')
             if camera.camera_print_image(camera_image, window_display) == 0:
-                pass
-                # return
+                return
 
             logger.root_logger.debug(f"Camera. Received and played {len(image)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
@@ -150,18 +111,18 @@ def receive_play(sock):
 def start_join_threads(sock_tcp, sock_udp, pack=b''):
     read_send_thread = Thread(target=read_send, args=(sock_tcp,))
     receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
+    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp,))
     receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp, pack, ))
-    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp, ))
 
     read_send_thread.start()
     receive_play_thread.start()
-    receive_and_play_thread.start()
     get_and_send_thread.start()
+    receive_and_play_thread.start()
 
     read_send_thread.join()
     receive_play_thread.join()
-    receive_and_play_thread.join()
     get_and_send_thread.join()
+    receive_and_play_thread.join()
 
     # NOTE: stop steams so no further data is buffered.
     # They will be started back automatically after first read.
