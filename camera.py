@@ -2,7 +2,7 @@ import pygame.camera
 import pygame.event as pg_event
 
 
-def camera_init(path="/dev/video0", resolution=(1280, 720)):
+def camera_init(path="/dev/video0", resolution=(640, 480)):
     pygame.init()
     pygame.camera.init()
 

@@ -26,30 +26,30 @@ def get_addr(host: str, port: int) -> str:
     return ':'.join((host, str(port)))
 
 
-def listen(host="127.0.0.1", port=1234):
+def listen(addr="127.0.0.1:1234"):
     sock = s.socket(s.AF_INET, s.SOCK_STREAM)
     sock.setsockopt(s.SOL_SOCKET, s.SO_REUSEADDR, 1)
 
     # NOTE: going back and forth to add port if missing.
-    # host, port = get_host_port(addr)
-    # addr = get_addr(host, port)
+    host, port = get_host_port(addr)
+    addr = get_addr(host, port)
 
     sock.bind((host, port))
     sock.listen()
 
-    log.info(f"Listening on {host + ':' + str(port)}")
+    log.info(f"Listening on {addr}")
     return sock
 
 
-def dial(host="127.0.0.1", port=1234):
+def dial(addr="127.0.0.1:1234"):
     sock = s.socket(s.AF_INET, s.SOCK_STREAM)
 
     # NOTE: going back and forth to add port if missing.
-    # host, port = get_host_port(addr)
-    # addr = get_addr(host, port)
+    host, port = get_host_port(addr)
+    addr = get_addr(host, port)
 
-    log.info(f"Dialing {host + ':' + str(port)}...")
+    log.info(f"Dialing {addr}...")
     sock.connect((host, port))
-    log.info(f"Connected to {host + ':' + str(port)}")
+    log.info(f"Connected to {addr}")
 
     return sock
