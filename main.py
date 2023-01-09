@@ -29,7 +29,11 @@ def get_and_send_data(sock):
             while pack != b'STARTED':
                 start_time = time.time()
                 while time.time() - start_time < 100:
-                    pack = sock.recv(len(b'STARTED'))
+                    try:
+                        pack = sock.recv(len(b'STARTED'))
+                    except:
+                        pack = b''
+
                     if pack == b'STARTED':
                         break
                     # print("SENDER: received wrong:", pack)
@@ -47,7 +51,11 @@ def get_and_send_data(sock):
                 while pack != b'RECEIVED' + struct.pack("i", i):
                     start_time = time.time()
                     while time.time() - start_time < 100:
-                        pack = sock.recv(len(b'RECEIVED' + struct.pack("i", i)))
+                        try:
+                            pack = sock.recv(len(b'RECEIVED' + struct.pack("i", i)))
+                        except:
+                            pack = b''
+
                         if pack == b'RECEIVED' + struct.pack("i", i):
                             break
                         # print("SENDER: received wrong:", pack)
@@ -73,9 +81,11 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
         while True:
             image = b''
 
-            if pack != b'START':
-                while sock.recv(len(b'START')) != b'START':
-                    pass
+            while pack != b'START':
+                try:
+                    pack = sock.recv(len(b'START'))
+                except:
+                    pack = b''
 
             # print("RECEIVER: received START")
 
@@ -89,7 +99,11 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
                 while len(pack) != CHUNK_SIZE + 4 or struct.unpack("i", pack[:4])[0] != i:
                     start_time = time.time()
                     while time.time() - start_time < 100:
-                        pack = sock.recv(CHUNK_SIZE + 4)
+                        try:
+                            pack = sock.recv(CHUNK_SIZE + 4)
+                        except:
+                            pack = b''
+
                         if len(pack) == CHUNK_SIZE + 4 and struct.unpack("i", pack[:4])[0] == i:
                             break
                         # print("RECEIVER: received wrong:", pack, time.time() - start_time)
