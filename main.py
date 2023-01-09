@@ -1,4 +1,5 @@
 import argparse
+import time
 import logger
 import sound as snd
 import pygame.image
@@ -13,6 +14,7 @@ CHUNK_SIZE = 1200
 
 
 def get_and_send_data(sock):
+    sock.settimeout(100)
     cam = camera.camera_init()
 
     try:
@@ -20,8 +22,43 @@ def get_and_send_data(sock):
             camera_image = cam.get_image()
             data = pygame.image.tostring(camera_image, 'RGB')
 
+            sock.send(b'START')
+            # print("SENDER: sent START")
+
+            pack = b''
+            while pack != b'STARTED':
+                start_time = time.time()
+                while time.time() - start_time < 100:
+                    pack = sock.recv(len(b'STARTED'))
+                    if pack == b'STARTED':
+                        break
+                    # print("SENDER: received wrong:", pack)
+                else:
+                    # print("SENDER: time out: sent START")
+                    sock.send(b'START')
+                    # print("SENDER: sent START")
+
+            # print("SENDER: received STARTED")
+
             for i in range(640 * 480 * 3 // CHUNK_SIZE):
                 sock.send(b''.join([struct.pack("i", i), data[i * CHUNK_SIZE:(i + 1) * CHUNK_SIZE]]))
+
+                pack = b''
+                while pack != b'RECEIVED' + struct.pack("i", i):
+                    start_time = time.time()
+                    while time.time() - start_time < 100:
+                        pack = sock.recv(len(b'RECEIVED' + struct.pack("i", i)))
+                        if pack == b'RECEIVED' + struct.pack("i", i):
+                            break
+                        # print("SENDER: received wrong:", pack)
+                    else:
+                        # print("SENDER: time out: send pack")
+                        sock.send(b''.join([struct.pack("i", i), data[i * CHUNK_SIZE:(i + 1) * CHUNK_SIZE]]))
+                        # print("SENDER: sent pack")
+
+            #     print("SENDER: received", struct.unpack("8si", pack))
+            #
+            # print("SENDER: end of the `for` loop")
 
             logger.root_logger.debug(f"Camera. Got and sent {len(data)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
@@ -29,32 +66,44 @@ def get_and_send_data(sock):
 
 
 def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
+    sock.settimeout(100)
     window_display = pygame.display.set_mode(resolution)
 
     try:
         while True:
-            data = []
-            index = []
-
-            if len(pack) != 0:
-                index.append(struct.unpack("i", pack[:4]))
-                data.append(pack)
-                pack = b''
-
-            while len(data) < resolution[0] * resolution[1] * 3 // CHUNK_SIZE:  # Size of an image // size of the record
-                got = sock.recv(CHUNK_SIZE + 4)
-
-                if struct.unpack("i", got[:4]) in index:
-                    continue
-
-                index.append(struct.unpack("i", got[:4]))
-                data.append(got)
-
-            data = sorted(data, key=lambda data_item: struct.unpack("i", data_item[:4]))
-
             image = b''
-            for i in range(len(data)):
-                image += bytes(data[i][4:])
+
+            if pack != b'START':
+                while sock.recv(len(b'START')) != b'START':
+                    pass
+
+            # print("RECEIVER: received START")
+
+            sock.send(b'STARTED')
+            # print("RECEIVER: sent STARTED")
+
+            prev_message = b'STARTED'
+
+            for i in range(640 * 480 * 3 // CHUNK_SIZE):
+                pack = b''
+                while len(pack) != CHUNK_SIZE + 4 or struct.unpack("i", pack[:4])[0] != i:
+                    start_time = time.time()
+                    while time.time() - start_time < 100:
+                        pack = sock.recv(CHUNK_SIZE + 4)
+                        if len(pack) == CHUNK_SIZE + 4 and struct.unpack("i", pack[:4])[0] == i:
+                            break
+                        # print("RECEIVER: received wrong:", pack, time.time() - start_time)
+                    else:
+                        # print("RECEIVER: time out: send previous message")
+                        sock.send(prev_message)
+                        # print("RECEIVER: sent previous message")
+
+                # print("Pack #{:g} arrived!".format(i))
+                image += pack[4:]
+                sock.send(b'RECEIVED' + struct.pack("i", i))
+                prev_message = b'RECEIVED' + struct.pack("i", i)
+
+            # print("RECEIVER: end of the `for` loop")
 
             camera_image = pygame.image.fromstring(image, resolution, 'RGB')
             if camera.camera_print_image(camera_image, window_display) == 0:
@@ -102,11 +151,11 @@ def receive_play(sock):
         logger.root_logger.warning(e)
 
 
-def start_join_threads(sock_tcp, sock_udp, pack=b''):
+def start_join_threads(sock_tcp, sock_udp_send, sock_udp_receive, pack=b''):
     read_send_thread = Thread(target=read_send, args=(sock_tcp,))
     receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
-    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp,))
-    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp, pack, ))
+    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp_send,))
+    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp_receive, pack, ))
 
     read_send_thread.start()
     receive_play_thread.start()
@@ -125,26 +174,80 @@ def start_join_threads(sock_tcp, sock_udp, pack=b''):
 
 
 def server(addr):
+    '''
+    ┌────────┬───────────┬──────────────┐
+    │        │ Send port │ Receive port │
+    ├────────┼───────────┼──────────────┤
+    │ Server │    4321   │      1111    │
+    └────────┴───────────┴──────────────┘
+    '''
     sock_tcp = tcp.listen(addr)
-    sock_udp = udp.listen(addr)
+
+    host = addr.split(':')[0]
+    sock_udp_send = udp.listen(host, 4321)
+    sock_udp_receive = udp.listen(host, 1111)
 
     while True:
         peer_sock_tcp, (peer_host_tcp, peer_port_tcp) = sock_tcp.accept()
         peer_addr_tcp = tcp.get_addr(peer_host_tcp, peer_port_tcp)
         tcp.log.info(f"Accepted from {peer_addr_tcp}")
 
-        data_received, address = sock_udp.recvfrom(CHUNK_SIZE + 4)
-        sock_udp.connect(address)
-        tcp.log.info(f"Connected to {address[0] + ':' + str(address[1])}")
+        data_received, address = sock_udp_receive.recvfrom(3)
+        sock_udp_receive.connect(address)
+        sock_udp_receive.send(b'HI!')
+        udp.log.info(f"Connected to {address[0] + ':' + str(address[1])}")
 
-        start_join_threads(peer_sock_tcp, sock_udp, data_received)
+        data_received, address = sock_udp_send.recvfrom(3)
+        sock_udp_send.connect(address)
+        sock_udp_send.send(b'HI!')
+        udp.log.info(f"Connected to {address[0] + ':' + str(address[1])}")
+
+        start_join_threads(peer_sock_tcp, sock_udp_send, sock_udp_receive)
 
 
 def client(addr):
+    '''
+    ┌────────┬───────────┬──────────────┐
+    │        │ Send port │ Receive port │
+    ├────────┼───────────┼──────────────┤
+    │ Client │    1111   │      4321    │
+    └────────┴───────────┴──────────────┘
+    '''
     sock_tcp = tcp.dial(addr)
-    sock_udp = udp.dial(addr)
 
-    start_join_threads(sock_tcp, sock_udp)
+    host = addr.split(':')[0]
+
+    # Connecting servers receiver
+    sock_udp_send = udp.dial(host, 1111)
+    sock_udp_send.settimeout(100)
+    sock_udp_send.send(b'Hi!')
+
+    pack = b''
+    while pack != b'HI!':
+        start_time = time.time()
+        while time.time() - start_time < 100:
+            pack = sock_udp_send.recv(3)
+            if pack == b'HI!':
+                break
+        else:
+            sock_udp_send.send(b'Hi!')
+
+    # Connecting servers sender
+    sock_udp_receive = udp.dial(host, 4321)
+    sock_udp_receive.settimeout(100)
+    sock_udp_receive.send(b'Hi!')
+
+    pack = b''
+    while pack != b'HI!':
+        start_time = time.time()
+        while time.time() - start_time < 100:
+            pack = sock_udp_receive.recv(3)
+            if pack == b'HI!':
+                break
+        else:
+            sock_udp_receive.send(b'Hi!')
+
+    start_join_threads(sock_tcp, sock_udp_send, sock_udp_receive)
 
 
 def main():
