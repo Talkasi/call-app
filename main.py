@@ -1,5 +1,7 @@
 import argparse
 import time
+from functools import reduce
+
 import logger
 import sound as snd
 import pygame.image
@@ -14,60 +16,23 @@ CHUNK_SIZE = 1200
 
 
 def get_and_send_data(sock):
-    sock.settimeout(100)
+    sock.settimeout(100000)
     cam = camera.camera_init()
 
+    current_image_number = 0
     try:
         while True:
             camera_image = cam.get_image()
             data = pygame.image.tostring(camera_image, 'RGB')
 
-            sock.send(b'START')
-            # print("SENDER: sent START")
-
-            pack = b''
-            while pack != b'STARTED':
-                start_time = time.time()
-                while time.time() - start_time < 100:
-                    try:
-                        pack = sock.recv(len(b'STARTED'))
-                    except:
-                        pack = b''
-
-                    if pack == b'STARTED':
-                        break
-                    # print("SENDER: received wrong:", pack)
-                else:
-                    # print("SENDER: time out: sent START")
-                    sock.send(b'START')
-                    # print("SENDER: sent START")
-
-            # print("SENDER: received STARTED")
+            if current_image_number == 2 ** 32 - 1:
+                current_image_number = 0
 
             for i in range(640 * 480 * 3 // CHUNK_SIZE):
-                sock.send(b''.join([struct.pack("i", i), data[i * CHUNK_SIZE:(i + 1) * CHUNK_SIZE]]))
+                sock.send(b''.join([struct.pack('i', current_image_number), struct.pack('i', i),
+                                   data[i * CHUNK_SIZE:(i + 1) * CHUNK_SIZE]]))
 
-                pack = b''
-                while pack != b'RECEIVED' + struct.pack("i", i):
-                    start_time = time.time()
-                    while time.time() - start_time < 100:
-                        try:
-                            pack = sock.recv(len(b'RECEIVED' + struct.pack("i", i)))
-                        except:
-                            pack = b''
-
-                        if pack == b'RECEIVED' + struct.pack("i", i):
-                            break
-                        # print("SENDER: received wrong:", pack)
-                    else:
-                        # print("SENDER: time out: send pack")
-                        sock.send(b''.join([struct.pack("i", i), data[i * CHUNK_SIZE:(i + 1) * CHUNK_SIZE]]))
-                        # print("SENDER: sent pack")
-
-            #     print("SENDER: received", struct.unpack("8si", pack))
-            #
-            # print("SENDER: end of the `for` loop")
-
+            current_image_number += 1
             logger.root_logger.debug(f"Camera. Got and sent {len(data)} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
@@ -77,49 +42,56 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
     sock.settimeout(100)
     window_display = pygame.display.set_mode(resolution)
 
+    current_image_number = 0
+    queue = b''
     try:
         while True:
-            image = b''
+            if len(queue) != 0:
+                data = [queue]
+            else:
+                data = []
 
-            while pack != b'START':
+            while True:
                 try:
-                    pack = sock.recv(len(b'START'))
-                except:
-                    pack = b''
+                    pack = sock.recv(CHUNK_SIZE + 8)
+                    while len(pack) != CHUNK_SIZE + 8 or struct.unpack('i', pack[:4])[0] < current_image_number:
+                        pack = sock.recv(CHUNK_SIZE + 8)
+                        # print("WRONG_PACK", struct.unpack('i', pack[:4])[0], struct.unpack('i', pack[4:8])[0])
+                        pass
+                    # print("PACK", "IMAGE", struct.unpack('i', pack[:4])[0], "NUMBER", struct.unpack('i', pack[4:8])[0],
+                    #       "LEN", 1 if len(pack) == CHUNK_SIZE + 8 else 0, len(data))
+                    if struct.unpack('i', pack[:4])[0] == current_image_number:
+                        data += [pack]
+                    if struct.unpack('i', pack[:4])[0] > current_image_number:
+                        # print("NEXT_IMAGE", struct.unpack('i', pack[:4])[0], struct.unpack('i', pack[4:8])[0])
+                        queue = pack
+                        break
+                except TimeoutError:
+                    pass
 
-            # print("RECEIVER: received START")
+            # print(len(data), struct.unpack('i', data[0][:4]), struct.unpack('i', data[0][4:8]),
+            #       struct.unpack('i', data[-1][4:8]))
+            data = list(set(data))
+            data.sort(key=lambda data_item: struct.unpack('i', data_item[4:8])[0])
 
-            sock.send(b'STARTED')
-            # print("RECEIVER: sent STARTED")
+            image = b''
+            index_should_be = 0
+            for i in range(len(data)):
+                data_index = struct.unpack('i', data[i][4:8])[0]
+                if data_index - index_should_be > 0:
+                    image += b'\x00' * (data_index - index_should_be) * CHUNK_SIZE
+                    index_should_be += data_index - index_should_be
+                image += data[i][8:]
+                index_should_be += 1
 
-            prev_message = b'STARTED'
+            image += b'\x00' * (640 * 480 * 3 - len(image))
 
-            for i in range(640 * 480 * 3 // CHUNK_SIZE):
-                pack = b''
-                while len(pack) != CHUNK_SIZE + 4 or struct.unpack("i", pack[:4])[0] != i:
-                    start_time = time.time()
-                    while time.time() - start_time < 100:
-                        try:
-                            pack = sock.recv(CHUNK_SIZE + 4)
-                        except:
-                            pack = b''
-
-                        if len(pack) == CHUNK_SIZE + 4 and struct.unpack("i", pack[:4])[0] == i:
-                            break
-                        # print("RECEIVER: received wrong:", pack, time.time() - start_time)
-                    else:
-                        # print("RECEIVER: time out: send previous message")
-                        sock.send(prev_message)
-                        # print("RECEIVER: sent previous message")
-
-                # print("Pack #{:g} arrived!".format(i))
-                image += pack[4:]
-                sock.send(b'RECEIVED' + struct.pack("i", i))
-                prev_message = b'RECEIVED' + struct.pack("i", i)
-
-            # print("RECEIVER: end of the `for` loop")
-
-            camera_image = pygame.image.fromstring(image, resolution, 'RGB')
+            current_image_number += 1
+            try:
+                camera_image = pygame.image.fromstring(image, resolution, 'RGB')
+            except:
+                print("WRONG IMAGE LENGTH", len(image))
+                exit()
             if camera.camera_print_image(camera_image, window_display) == 0:
                 return
 
@@ -169,7 +141,7 @@ def start_join_threads(sock_tcp, sock_udp_send, sock_udp_receive, pack=b''):
     read_send_thread = Thread(target=read_send, args=(sock_tcp,))
     receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
     get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp_send,))
-    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp_receive, pack, ))
+    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp_receive, pack,))
 
     read_send_thread.start()
     receive_play_thread.start()
