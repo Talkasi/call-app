@@ -1,7 +1,5 @@
 import argparse
 import time
-from functools import reduce
-
 import logger
 import sound as snd
 import pygame.image
@@ -10,13 +8,14 @@ import tcp
 import udp
 import struct
 from threading import Thread
+import queue
 
 buffer_size = None
 CHUNK_SIZE = 1200
-
+q = queue.Queue(0)
 
 def get_and_send_data(sock):
-    sock.settimeout(100000)
+    sock.settimeout(100)
     cam = camera.camera_init()
 
     current_image_number = 0
@@ -38,9 +37,10 @@ def get_and_send_data(sock):
         logger.root_logger.warning(e)
 
 
-def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
+def receive_data(sock, pack=b'', resolution=(640, 480)):
     sock.settimeout(100)
-    window_display = pygame.display.set_mode(resolution)
+
+    print("Recieving data")
 
     current_image_number = 0
     queue = b''
@@ -56,7 +56,7 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
                     pack = sock.recv(CHUNK_SIZE + 8)
                     while len(pack) != CHUNK_SIZE + 8 or struct.unpack('i', pack[:4])[0] < current_image_number:
                         pack = sock.recv(CHUNK_SIZE + 8)
-                        # print("WRONG_PACK", struct.unpack('i', pack[:4])[0], struct.unpack('i', pack[4:8])[0])
+                        print("WRONG_PACK", struct.unpack('i', pack[:4])[0], struct.unpack('i', pack[4:8])[0])
                         pass
                     # print("PACK", "IMAGE", struct.unpack('i', pack[:4])[0], "NUMBER", struct.unpack('i', pack[4:8])[0],
                     #       "LEN", 1 if len(pack) == CHUNK_SIZE + 8 else 0, len(data))
@@ -69,35 +69,44 @@ def receive_and_play_data(sock, pack=b'', resolution=(640, 480)):
                 except TimeoutError:
                     pass
 
-            # print(len(data), struct.unpack('i', data[0][:4]), struct.unpack('i', data[0][4:8]),
-            #       struct.unpack('i', data[-1][4:8]))
-            data = list(set(data))
-            data.sort(key=lambda data_item: struct.unpack('i', data_item[4:8])[0])
-
-            image = b''
-            index_should_be = 0
-            for i in range(len(data)):
-                data_index = struct.unpack('i', data[i][4:8])[0]
-                if data_index - index_should_be > 0:
-                    image += b'\x00' * (data_index - index_should_be) * CHUNK_SIZE
-                    index_should_be += data_index - index_should_be
-                image += data[i][8:]
-                index_should_be += 1
-
-            image += b'\x00' * (640 * 480 * 3 - len(image))
-
+            print(len(data), struct.unpack('i', data[0][:4]), struct.unpack('i', data[0][4:8]),
+                  struct.unpack('i', data[-1][4:8]))
+            q.put(data)
             current_image_number += 1
-            try:
-                camera_image = pygame.image.fromstring(image, resolution, 'RGB')
-            except:
-                print("WRONG IMAGE LENGTH", len(image))
-                exit()
-            if camera.camera_print_image(camera_image, window_display) == 0:
-                return
 
-            logger.root_logger.debug(f"Camera. Received and played {len(image)} bytes")
+            logger.root_logger.debug(f"Camera. Received {len(data) * CHUNK_SIZE} bytes")
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
+
+
+def play_data(resolution=(640, 480)):
+    window_display = pygame.display.set_mode(resolution)
+    while True:
+        data = q.get()
+
+        data = list(set(data))
+        data.sort(key=lambda data_item: struct.unpack('i', data_item[4:8])[0])
+
+        image = b''
+        index_should_be = 0
+        for i in range(len(data)):
+            data_index = struct.unpack('i', data[i][4:8])[0]
+            if data_index - index_should_be > 0:
+                image += b'\x00' * (data_index - index_should_be) * CHUNK_SIZE
+                index_should_be += data_index - index_should_be
+            image += data[i][8:]
+            index_should_be += 1
+
+        image += b'\x00' * (640 * 480 * 3 - len(image))
+
+        try:
+            camera_image = pygame.image.fromstring(image, resolution, 'RGB')
+        except:
+            print("WRONG IMAGE LENGTH", len(image))
+            exit()
+        if camera.camera_print_image(camera_image, window_display) == 0:
+            return
+        logger.root_logger.debug(f"Camera. Played {len(image)} bytes")
 
 
 def read_send(sock):
@@ -141,17 +150,20 @@ def start_join_threads(sock_tcp, sock_udp_send, sock_udp_receive, pack=b''):
     read_send_thread = Thread(target=read_send, args=(sock_tcp,))
     receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
     get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp_send,))
-    receive_and_play_thread = Thread(target=receive_and_play_data, args=(sock_udp_receive, pack,))
+    receive_and_play_thread = Thread(target=receive_data, args=(sock_udp_receive, pack,))
+    play_thread = Thread(target=play_data, args=())
 
     read_send_thread.start()
     receive_play_thread.start()
     get_and_send_thread.start()
     receive_and_play_thread.start()
+    play_thread.start()
 
     read_send_thread.join()
     receive_play_thread.join()
     get_and_send_thread.join()
     receive_and_play_thread.join()
+    play_thread.join()
 
     # NOTE: stop steams so no further data is buffered.
     # They will be started back automatically after first read.
