@@ -42,6 +42,8 @@ def get_and_send_data(sock):
 
             current_image_number += 1
             logger.root_logger.debug(f"Camera. Got and sent {len(image)} bytes")
+            time.sleep(0)
+
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
@@ -81,6 +83,8 @@ def receive_data(sock, pack=b'', resolution=(640, 480)):
             current_image_number += 1
 
             logger.root_logger.debug(f"Camera. Received {len(data) * CHUNK_SIZE} bytes")
+            time.sleep(0)
+
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
@@ -128,6 +132,7 @@ def play_data(resolution=(640, 480)):
         if camera.camera_print_image(camera_image, window_display) == 0:
             return
         logger.root_logger.debug(f"Camera. Played {len(image)} bytes")
+        time.sleep(0)
 
 
 def read_send(sock):
@@ -147,6 +152,8 @@ def read_send(sock):
                 sent += sock.send(samples[sent:])
 
             logger.root_logger.debug(f"Sound. Read and sent {len(samples)} bytes")
+            time.sleep(0)
+
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
@@ -162,6 +169,8 @@ def receive_play(sock):
 
             logger.root_logger.debug(
                 f"Sound. Received and played {len(samples)} bytes")
+            time.sleep(0)
+
 
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
