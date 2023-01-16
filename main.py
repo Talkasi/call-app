@@ -1,5 +1,7 @@
 import argparse
 import time
+from io import BytesIO
+from PIL import Image
 import logger
 import sound as snd
 import pygame.image
@@ -21,14 +23,15 @@ def get_and_send_data(sock):
     current_image_number = 0
     try:
         while True:
-            camera_image = cam.get_image().convert_alpha()
-            pygame.image.save(camera_image, "video.jpeg")
-            # THIS IS SHIT
-            file2 = open("video.jpeg", "rb")
-            image = file2.read()
-            file2.close()
+            camera_image = cam.get_image()
 
-            print(len(image))
+            buffer = BytesIO()
+            im = Image.frombuffer("RGB", (640, 480), bytes(pygame.image.tostring(camera_image, "RGB")))
+            im.save(buffer, format='JPEG')
+            image = buffer.getvalue()
+            buffer.close()
+
+            # print(len(image))
 
             if current_image_number == 2 ** 32 - 1:
                 current_image_number = 0
@@ -73,7 +76,7 @@ def receive_data(sock, pack=b'', resolution=(640, 480)):
                 except TimeoutError:
                     pass
 
-            print(len(data))
+            # print(len(data))
             q.put(data)
             current_image_number += 1
 
@@ -101,13 +104,22 @@ def play_data(resolution=(640, 480)):
             index_should_be += 1
 
         image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
+
+        # buffer = BytesIO()
+        # buffer.write(image)
+        # image = PIL.Image.open(buffer)
+        # print(type(image))
+        # im = Image.frombuffer("RGB", (640, 480), bytes(pygame.image.tostring(camera_image, "RGB")))
+        # im.save(buffer, format='JPEG')
+        # image = buffer.getvalue()
+        # buffer.close()
+        #
         # THIS IS SHIT
         file1 = open("video_receive.jpeg", "wb")
         file1.write(image)
         file1.close()
 
         camera_image = pygame.image.load("video_receive.jpeg")
-
         # try:
         #     camera_image = pygame.image.fromstring(image, resolution, 'RGB')
         # except:
