@@ -1,5 +1,4 @@
 import argparse
-import gzip
 import logging
 import time
 from io import BytesIO
@@ -12,11 +11,10 @@ import tcp
 import udp
 import struct
 from threading import Thread
-import queue
 
 buffer_size = None
-CHUNK_SIZE = 1500
-q = queue.Queue(0)
+CHUNK_SIZE = 1500 - 12
+
 
 def get_and_send_data(sock):
     sock.settimeout(100)
@@ -32,10 +30,6 @@ def get_and_send_data(sock):
             im.save(buffer, optimize=True, quality=25, format='JPEG')
             image = buffer.getvalue()
             buffer.close()
-
-            # print(len(image))
-            # image = gzip.compress(image, 9)
-            # print(len(image))
 
             if current_image_number == 2 ** 32 - 1:
                 current_image_number = 0
@@ -54,6 +48,8 @@ def get_and_send_data(sock):
 
 def receive_data(sock, pack=b'', resolution=(640, 480)):
     sock.settimeout(100)
+    log = logging.getLogger("Camera")
+    window_display = pygame.display.set_mode(resolution)
 
     current_image_number = 0
     queue = b''
@@ -78,66 +74,56 @@ def receive_data(sock, pack=b'', resolution=(640, 480)):
                 except TimeoutError:
                     pass
 
-            q.put(data)
+            data = list(set(data))
+            data.sort(key=lambda data_item: struct.unpack('i', data_item[8:12])[0])
+
+            image = b''
+            index_should_be = 0
+            for i in range(len(data)):
+                data_index = struct.unpack('i', data[i][8:12])[0]
+                if data_index - index_should_be > 0:
+                    image += b'\x00' * (data_index - index_should_be) * CHUNK_SIZE
+                    index_should_be += data_index - index_should_be
+                image += data[i][12:]
+                index_should_be += 1
+
+            image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
+
+            # buffer = BytesIO()
+            # buffer.write(image)
+            # image = PIL.Image.open(buffer)
+            # print(type(image))
+            # im = Image.frombuffer("RGB", (640, 480), bytes(pygame.image.tostring(camera_image, "RGB")))
+            # im.save(buffer, format='JPEG')
+            # image = buffer.getvalue()
+            # buffer.close()
+            #
+            # THIS IS SHIT
+            file1 = open("video_receive.jpeg", "wb")
+            file1.write(image)
+            file1.close()
+
+            try:
+                camera_image = pygame.image.load("video_receive.jpeg")
+            except:
+                log.warning("file corrupted")
+                continue
+
+            # try:
+            #     camera_image = pygame.image.fromstring(image, resolution, 'RGB')
+            # except:
+            #     print("WRONG IMAGE LENGTH", len(image))
+            #     exit()
+            if camera.camera_print_image(camera_image, window_display) == 0:
+                return
+
             current_image_number += 1
 
-            logger.root_logger.debug(f"Camera. Received {sum(len(pack) for pack in data)} bytes")
+            logger.root_logger.debug(f"Camera. Received and played {sum(len(pack) for pack in data)} bytes")
             time.sleep(0)
 
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
-
-
-def play_data(resolution=(640, 480)):
-    log = logging.getLogger("Camera")
-    window_display = pygame.display.set_mode(resolution)
-    while True:
-        data = q.get()
-
-        data = list(set(data))
-        data.sort(key=lambda data_item: struct.unpack('i', data_item[8:12])[0])
-
-        image = b''
-        index_should_be = 0
-        for i in range(len(data)):
-            data_index = struct.unpack('i', data[i][8:12])[0]
-            if data_index - index_should_be > 0:
-                image += b'\x00' * (data_index - index_should_be) * CHUNK_SIZE
-                index_should_be += data_index - index_should_be
-            image += data[i][12:]
-            index_should_be += 1
-
-        image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
-
-        # buffer = BytesIO()
-        # buffer.write(image)
-        # image = PIL.Image.open(buffer)
-        # print(type(image))
-        # im = Image.frombuffer("RGB", (640, 480), bytes(pygame.image.tostring(camera_image, "RGB")))
-        # im.save(buffer, format='JPEG')
-        # image = buffer.getvalue()
-        # buffer.close()
-        #
-        # THIS IS SHIT
-        file1 = open("video_receive.jpeg", "wb")
-        file1.write(image)
-        file1.close()
-
-        try:
-            camera_image = pygame.image.load("video_receive.jpeg")
-        except:
-            log.warning("file corrupted")
-            continue
-
-        # try:
-        #     camera_image = pygame.image.fromstring(image, resolution, 'RGB')
-        # except:
-        #     print("WRONG IMAGE LENGTH", len(image))
-        #     exit()
-        if camera.camera_print_image(camera_image, window_display) == 0:
-            return
-        logger.root_logger.debug(f"Camera. Played {len(image)} bytes")
-        time.sleep(0)
 
 
 def read_send(sock):
@@ -176,7 +162,6 @@ def receive_play(sock):
                 f"Sound. Received and played {len(samples)} bytes")
             time.sleep(0)
 
-
     except (BrokenPipeError, ConnectionResetError) as e:
         logger.root_logger.warning(e)
 
@@ -186,19 +171,16 @@ def start_join_threads(sock_tcp, sock_udp_send, sock_udp_receive, pack=b''):
     receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
     get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp_send,))
     receive_and_play_thread = Thread(target=receive_data, args=(sock_udp_receive, pack,))
-    play_thread = Thread(target=play_data, args=())
 
     read_send_thread.start()
     receive_play_thread.start()
     get_and_send_thread.start()
     receive_and_play_thread.start()
-    play_thread.start()
 
     read_send_thread.join()
     receive_play_thread.join()
     get_and_send_thread.join()
     receive_and_play_thread.join()
-    play_thread.join()
 
     # NOTE: stop steams so no further data is buffered.
     # They will be started back automatically after first read.
