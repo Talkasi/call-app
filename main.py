@@ -1,4 +1,5 @@
 import argparse
+import gzip
 import time
 from io import BytesIO
 from PIL import Image
@@ -27,10 +28,12 @@ def get_and_send_data(sock):
 
             buffer = BytesIO()
             im = Image.frombuffer("RGB", (640, 480), bytes(pygame.image.tostring(camera_image, "RGB")))
-            im.save(buffer, format='JPEG')
+            im.save(buffer, optimize=True, quality=20, format='JPEG')
             image = buffer.getvalue()
             buffer.close()
 
+            # print(len(image))
+            image = gzip.compress(image, 9)
             # print(len(image))
 
             if current_image_number == 2 ** 32 - 1:
@@ -82,7 +85,7 @@ def receive_data(sock, pack=b'', resolution=(640, 480)):
             q.put(data)
             current_image_number += 1
 
-            logger.root_logger.debug(f"Camera. Received {len(data) * CHUNK_SIZE} bytes")
+            logger.root_logger.debug(f"Camera. Received {sum(len(pack) for pack in data)} bytes")
             time.sleep(0)
 
     except (BrokenPipeError, ConnectionResetError) as e:
@@ -108,6 +111,7 @@ def play_data(resolution=(640, 480)):
             index_should_be += 1
 
         image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
+        image = gzip.decompress(image)
 
         # buffer = BytesIO()
         # buffer.write(image)
