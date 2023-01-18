@@ -46,7 +46,7 @@ def get_and_send_data(sock):
         logger.root_logger.warning(e)
 
 
-def receive_data(sock, pack=b'', resolution=(640, 480)):
+def receive_data(sock, resolution=(640, 480)):
     sock.settimeout(100)
     log = logging.getLogger("Camera")
     window_display = pygame.display.set_mode(resolution)
@@ -166,11 +166,11 @@ def receive_play(sock):
         logger.root_logger.warning(e)
 
 
-def start_join_threads(sock_tcp, sock_udp_send, sock_udp_receive, pack=b''):
+def start_join_threads(sock_tcp, sock_udp):
     read_send_thread = Thread(target=read_send, args=(sock_tcp,))
     receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
-    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp_send,))
-    receive_and_play_thread = Thread(target=receive_data, args=(sock_udp_receive, pack,))
+    get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp,))
+    receive_and_play_thread = Thread(target=receive_data, args=(sock_udp,))
 
     read_send_thread.start()
     receive_play_thread.start()
@@ -189,80 +189,44 @@ def start_join_threads(sock_tcp, sock_udp_send, sock_udp_receive, pack=b''):
 
 
 def server(addr):
-    '''
-    ┌────────┬───────────┬──────────────┐
-    │        │ Send port │ Receive port │
-    ├────────┼───────────┼──────────────┤
-    │ Server │    4321   │      1111    │
-    └────────┴───────────┴──────────────┘
-    '''
     sock_tcp = tcp.listen(addr)
 
     host = addr.split(':')[0]
-    sock_udp_send = udp.listen(host, 4321)
-    sock_udp_receive = udp.listen(host, 1111)
+    sock_udp = udp.listen(host, 4321)
 
     while True:
         peer_sock_tcp, (peer_host_tcp, peer_port_tcp) = sock_tcp.accept()
         peer_addr_tcp = tcp.get_addr(peer_host_tcp, peer_port_tcp)
         tcp.log.info(f"Accepted from {peer_addr_tcp}")
 
-        data_received, address = sock_udp_receive.recvfrom(3)
-        sock_udp_receive.connect(address)
-        sock_udp_receive.send(b'HI!')
+        data_received, address = sock_udp.recvfrom(3)
+        sock_udp.connect(address)
+        sock_udp.send(b'HI!')
         udp.log.info(f"Connected to {address[0] + ':' + str(address[1])}")
 
-        data_received, address = sock_udp_send.recvfrom(3)
-        sock_udp_send.connect(address)
-        sock_udp_send.send(b'HI!')
-        udp.log.info(f"Connected to {address[0] + ':' + str(address[1])}")
-
-        start_join_threads(peer_sock_tcp, sock_udp_send, sock_udp_receive)
+        start_join_threads(peer_sock_tcp, sock_udp)
 
 
 def client(addr):
-    '''
-    ┌────────┬───────────┬──────────────┐
-    │        │ Send port │ Receive port │
-    ├────────┼───────────┼──────────────┤
-    │ Client │    1111   │      4321    │
-    └────────┴───────────┴──────────────┘
-    '''
     sock_tcp = tcp.dial(addr)
 
     host = addr.split(':')[0]
 
-    # Connecting servers receiver
-    sock_udp_send = udp.dial(host, 1111)
-    sock_udp_send.settimeout(100)
-    sock_udp_send.send(b'Hi!')
+    sock_udp = udp.dial(host, 4321)
+    sock_udp.settimeout(100)
+    sock_udp.send(b'Hi!')
 
     pack = b''
     while pack != b'HI!':
         start_time = time.time()
         while time.time() - start_time < 100:
-            pack = sock_udp_send.recv(3)
+            pack = sock_udp.recv(3)
             if pack == b'HI!':
                 break
         else:
-            sock_udp_send.send(b'Hi!')
+            sock_udp.send(b'Hi!')
 
-    # Connecting servers sender
-    sock_udp_receive = udp.dial(host, 4321)
-    sock_udp_receive.settimeout(100)
-    sock_udp_receive.send(b'Hi!')
-
-    pack = b''
-    while pack != b'HI!':
-        start_time = time.time()
-        while time.time() - start_time < 100:
-            pack = sock_udp_receive.recv(3)
-            if pack == b'HI!':
-                break
-        else:
-            sock_udp_receive.send(b'Hi!')
-
-    start_join_threads(sock_tcp, sock_udp_send, sock_udp_receive)
+    start_join_threads(sock_tcp, sock_udp)
 
 
 def main():
