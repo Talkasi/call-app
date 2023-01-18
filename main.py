@@ -28,12 +28,12 @@ def get_and_send_data(sock):
 
             buffer = BytesIO()
             im = Image.frombuffer("RGB", (640, 480), bytes(pygame.image.tostring(camera_image, "RGB")))
-            im.save(buffer, optimize=True, quality=20, format='JPEG')
+            im.save(buffer, optimize=True, quality=25, format='JPEG')
             image = buffer.getvalue()
             buffer.close()
 
             # print(len(image))
-            image = gzip.compress(image, 9)
+            # image = gzip.compress(image, 9)
             # print(len(image))
 
             if current_image_number == 2 ** 32 - 1:
@@ -111,7 +111,7 @@ def play_data(resolution=(640, 480)):
             index_should_be += 1
 
         image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
-        image = gzip.decompress(image)
+        # image = gzip.decompress(image)
 
         # buffer = BytesIO()
         # buffer.write(image)
