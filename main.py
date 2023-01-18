@@ -127,7 +127,12 @@ def play_data(resolution=(640, 480)):
         file1.write(image)
         file1.close()
 
-        camera_image = pygame.image.load("video_receive.jpeg")
+        try:
+            camera_image = pygame.image.load("video_receive.jpeg")
+        except:
+            print("File CORRUPTED")
+            continue
+
         # try:
         #     camera_image = pygame.image.fromstring(image, resolution, 'RGB')
         # except:
