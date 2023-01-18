@@ -1,5 +1,6 @@
 import argparse
 import gzip
+import logging
 import time
 from io import BytesIO
 from PIL import Image
@@ -68,20 +69,15 @@ def receive_data(sock, pack=b'', resolution=(640, 480)):
                     pack = sock.recv(CHUNK_SIZE + 12)
                     while struct.unpack('i', pack[4:8])[0] < current_image_number:
                         pack = sock.recv(CHUNK_SIZE + 12)
-                        print("WRONG_PACK", struct.unpack('i', pack[4:8])[0], struct.unpack('i', pack[8:12])[0])
                         pass
-                    # print("PACK", "IMAGE", struct.unpack('i', pack[:4])[0], "NUMBER", struct.unpack('i', pack[4:8])[0],
-                    #       "LEN", 1 if len(pack) == CHUNK_SIZE + 8 else 0, len(data))
                     if struct.unpack('i', pack[4:8])[0] == current_image_number:
                         data += [pack]
                     if struct.unpack('i', pack[4:8])[0] > current_image_number:
-                        # print("NEXT_IMAGE", struct.unpack('i', pack[:4])[0], struct.unpack('i', pack[4:8])[0])
                         queue = pack
                         break
                 except TimeoutError:
                     pass
 
-            # print(len(data))
             q.put(data)
             current_image_number += 1
 
@@ -93,6 +89,7 @@ def receive_data(sock, pack=b'', resolution=(640, 480)):
 
 
 def play_data(resolution=(640, 480)):
+    log = logging.getLogger("Camera")
     window_display = pygame.display.set_mode(resolution)
     while True:
         data = q.get()
@@ -111,7 +108,6 @@ def play_data(resolution=(640, 480)):
             index_should_be += 1
 
         image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
-        # image = gzip.decompress(image)
 
         # buffer = BytesIO()
         # buffer.write(image)
@@ -130,7 +126,7 @@ def play_data(resolution=(640, 480)):
         try:
             camera_image = pygame.image.load("video_receive.jpeg")
         except:
-            print("File CORRUPTED")
+            log.warning("file corrupted")
             continue
 
         # try:
