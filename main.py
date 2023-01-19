@@ -16,7 +16,7 @@ buffer_size = None
 CHUNK_SIZE = 1500 - 12
 
 
-def get_and_send_data(sock):
+def get_and_send_data(sock, resolution=(640, 480)):
     sock.settimeout(100)
     cam = camera.camera_init()
 
@@ -26,7 +26,7 @@ def get_and_send_data(sock):
             camera_image = cam.get_image()
 
             buffer = BytesIO()
-            im = Image.frombuffer("RGB", (640, 480), bytes(pygame.image.tostring(camera_image, "RGB")))
+            im = Image.frombuffer("RGB", resolution, bytes(pygame.image.tostring(camera_image, "RGB")))
             im.save(buffer, optimize=True, quality=25, format='JPEG')
             image = buffer.getvalue()
             buffer.close()
