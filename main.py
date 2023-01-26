@@ -27,7 +27,7 @@ def get_and_send_data(sock, resolution=(640, 480)):
 
             buffer = BytesIO()
             im = Image.frombuffer("RGB", resolution, bytes(pygame.image.tostring(camera_image, "RGB")))
-            im.save(buffer, optimize=True, quality=25, format='JPEG')
+            im.save(buffer, optimize=True, quality=45, format='JPEG')
             image = buffer.getvalue()
             buffer.close()
 
@@ -89,37 +89,19 @@ def receive_data(sock, resolution=(640, 480)):
 
             image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
 
-            # buffer = BytesIO()
-            # buffer.write(image)
-            # image = PIL.Image.open(buffer)
-            # print(type(image))
-            # im = Image.frombuffer("RGB", (640, 480), bytes(pygame.image.tostring(camera_image, "RGB")))
-            # im.save(buffer, format='JPEG')
-            # image = buffer.getvalue()
-            # buffer.close()
-            #
-            # THIS IS SHIT
-            file1 = open("video_receive.jpeg", "wb")
-            file1.write(image)
-            file1.close()
+            buffer = BytesIO()
+            buffer.write(image)
+            image = Image.open(buffer).tobytes()
 
             try:
-                camera_image = pygame.image.load("video_receive.jpeg")
+                camera_image = pygame.image.fromstring(image, resolution, 'RGB')
+                if camera.camera_print_image(camera_image, window_display) == 0:
+                    return
+                logger.root_logger.debug(f"Camera. Received and played {sum(len(pack) for pack in data)} bytes")
             except:
                 log.warning("file corrupted")
-                continue
-
-            # try:
-            #     camera_image = pygame.image.fromstring(image, resolution, 'RGB')
-            # except:
-            #     print("WRONG IMAGE LENGTH", len(image))
-            #     exit()
-            if camera.camera_print_image(camera_image, window_display) == 0:
-                return
 
             current_image_number += 1
-
-            logger.root_logger.debug(f"Camera. Received and played {sum(len(pack) for pack in data)} bytes")
             time.sleep(0)
 
     except (BrokenPipeError, ConnectionResetError) as e:
