@@ -89,9 +89,15 @@ def receive_data(sock, resolution=(640, 480)):
 
             image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
 
-            buffer = BytesIO()
-            buffer.write(image)
-            image = Image.open(buffer).tobytes()
+            try:
+                buffer = BytesIO()
+                buffer.write(image)
+                image = Image.open(buffer).tobytes()
+            except:
+                log.warning("file corrupted")
+                current_image_number += 1
+                time.sleep(0)
+                continue
 
             try:
                 camera_image = pygame.image.fromstring(image, resolution, 'RGB')
