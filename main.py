@@ -46,20 +46,19 @@ def get_and_send_data(sock, resolution=(640, 480)):
         logger.root_logger.warning(e)
 
 
-def receive_data(sock, resolution=(640, 480)):
+def receive_data(sock, queue=b'', resolution=(640, 480)):
     sock.settimeout(100)
     log = logging.getLogger("Camera")
     window_display = pygame.display.set_mode(resolution)
 
     current_image_number = 0
-    queue = b''
     try:
         while True:
             if len(queue) != 0:
                 data = [queue]
             else:
                 data = []
-
+                
             if current_image_number == 2 ** 32 - 1:
                 current_image_number = 0
 
@@ -77,6 +76,8 @@ def receive_data(sock, resolution=(640, 480)):
                 except TimeoutError:
                     pass
 
+            current_image_number += 1
+
             data = list(set(data))
             data.sort(key=lambda data_item: struct.unpack('i', data_item[8:12])[0])
 
@@ -85,24 +86,27 @@ def receive_data(sock, resolution=(640, 480)):
             for i in range(len(data)):
                 data_index = struct.unpack('i', data[i][8:12])[0]
                 if data_index - index_should_be > 0:
-                    image += b'\x00' * (data_index - index_should_be) * CHUNK_SIZE
-                    index_should_be += data_index - index_should_be
+                    # image += b'\x00' * (data_index - index_should_be) * CHUNK_SIZE
+                    # index_should_be += data_index - index_should_be
+                    log.warning("file corrupted")
+                    time.sleep(0)
+                    continue
+
                 image += data[i][12:]
                 index_should_be += 1
 
-            image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
-            current_image_number += 1
+            if struct.unpack('i', data[0][:4])[0] - len(image) > 0:
+                log.warning("file corrupted")
+                time.sleep(0)
+                continue
+
+            # image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
 
             try:
                 buffer = BytesIO()
                 buffer.write(image)
                 image = Image.open(buffer).tobytes()
-            except:
-                log.warning("file corrupted")
-                time.sleep(0)
-                continue
 
-            try:
                 camera_image = pygame.image.fromstring(image, resolution, 'RGB')
                 if camera.camera_print_image(camera_image, window_display) == 0:
                     return
@@ -156,11 +160,11 @@ def receive_play(sock):
         logger.root_logger.warning(e)
 
 
-def start_join_threads(sock_tcp, sock_udp):
+def start_join_threads(sock_tcp, sock_udp, pack=b''):
     read_send_thread = Thread(target=read_send, args=(sock_tcp,))
     receive_play_thread = Thread(target=receive_play, args=(sock_tcp,))
     get_and_send_thread = Thread(target=get_and_send_data, args=(sock_udp,))
-    receive_and_play_thread = Thread(target=receive_data, args=(sock_udp,))
+    receive_and_play_thread = Thread(target=receive_data, args=(sock_udp, pack,))
 
     read_send_thread.start()
     receive_play_thread.start()
@@ -189,33 +193,17 @@ def server(addr):
         peer_addr_tcp = tcp.get_addr(peer_host_tcp, peer_port_tcp)
         tcp.log.info(f"Accepted from {peer_addr_tcp}")
 
-        data_received, address = sock_udp.recvfrom(3)
+        data_received, address = sock_udp.recvfrom(CHUNK_SIZE + 12)
         sock_udp.connect(address)
-        sock_udp.send(b'HI!')
         udp.log.info(f"Connected to {address[0] + ':' + str(address[1])}")
 
-        start_join_threads(peer_sock_tcp, sock_udp)
+        start_join_threads(peer_sock_tcp, sock_udp, data_received)
 
 
 def client(addr):
     sock_tcp = tcp.dial(addr)
-
     host = addr.split(':')[0]
-
     sock_udp = udp.dial(host, 4321)
-    sock_udp.settimeout(100)
-    sock_udp.send(b'Hi!')
-
-    pack = b''
-    while pack != b'HI!':
-        start_time = time.time()
-        while time.time() - start_time < 100:
-            pack = sock_udp.recv(3)
-            if pack == b'HI!':
-                break
-        else:
-            sock_udp.send(b'Hi!')
-
     start_join_threads(sock_tcp, sock_udp)
 
 
