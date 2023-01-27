@@ -13,7 +13,7 @@ import struct
 from threading import Thread
 
 buffer_size = None
-CHUNK_SIZE = 1500 - 12
+CHUNK_SIZE = 1500 - struct.calcsize("i" * 3)
 
 
 def get_and_send_data(sock, resolution=(640, 480)):
@@ -60,6 +60,9 @@ def receive_data(sock, resolution=(640, 480)):
             else:
                 data = []
 
+            if current_image_number == 2 ** 32 - 1:
+                current_image_number = 0
+
             while True:
                 try:
                     pack = sock.recv(CHUNK_SIZE + 12)
@@ -88,6 +91,7 @@ def receive_data(sock, resolution=(640, 480)):
                 index_should_be += 1
 
             image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
+            current_image_number += 1
 
             try:
                 buffer = BytesIO()
@@ -95,7 +99,6 @@ def receive_data(sock, resolution=(640, 480)):
                 image = Image.open(buffer).tobytes()
             except:
                 log.warning("file corrupted")
-                current_image_number += 1
                 time.sleep(0)
                 continue
 
@@ -107,7 +110,6 @@ def receive_data(sock, resolution=(640, 480)):
             except:
                 log.warning("file corrupted")
 
-            current_image_number += 1
             time.sleep(0)
 
     except (BrokenPipeError, ConnectionResetError) as e:
