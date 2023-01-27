@@ -23,7 +23,10 @@ def get_and_send_data(sock, resolution=(640, 480)):
     current_image_number = 0
     try:
         while True:
-            camera_image = cam.get_image()
+            while True:
+                if cam.query_image():
+                    camera_image = cam.get_image()
+                    break
 
             buffer = BytesIO()
             im = Image.frombuffer("RGB", resolution, bytes(pygame.image.tostring(camera_image, "RGB")))
@@ -58,7 +61,7 @@ def receive_data(sock, queue=b'', resolution=(640, 480)):
                 data = [queue]
             else:
                 data = []
-                
+
             if current_image_number == 2 ** 32 - 1:
                 current_image_number = 0
 
