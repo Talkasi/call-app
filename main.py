@@ -13,7 +13,8 @@ import struct
 from threading import Thread
 
 buffer_size = None
-CHUNK_SIZE = 1500 - struct.calcsize("i" * 3)
+INFORMATION_SIZE = struct.calcsize("i" * 3)
+CHUNK_SIZE = 1500 - INFORMATION_SIZE
 
 
 def get_and_send_data(sock, resolution=(640, 480)):
@@ -30,10 +31,12 @@ def get_and_send_data(sock, resolution=(640, 480)):
 
             buffer = BytesIO()
             im = Image.frombuffer("RGB", resolution, bytes(pygame.image.tostring(camera_image, "RGB")))
+            # NOTE: quality parameter was chosen experimentally
             im.save(buffer, optimize=True, quality=45, format='JPEG')
             image = buffer.getvalue()
             buffer.close()
 
+            # To prevent integer overflow in bytes sending
             if current_image_number == 2 ** 32 - 1:
                 current_image_number = 0
 
@@ -62,14 +65,15 @@ def receive_data(sock, queue=b'', resolution=(640, 480)):
             else:
                 data = []
 
+            # To prevent integer overflow in bytes sending
             if current_image_number == 2 ** 32 - 1:
                 current_image_number = 0
 
             while True:
                 try:
-                    pack = sock.recv(CHUNK_SIZE + 12)
+                    pack = sock.recv(CHUNK_SIZE + INFORMATION_SIZE)
                     while struct.unpack('i', pack[4:8])[0] < current_image_number:
-                        pack = sock.recv(CHUNK_SIZE + 12)
+                        pack = sock.recv(CHUNK_SIZE + INFORMATION_SIZE)
                         pass
                     if struct.unpack('i', pack[4:8])[0] == current_image_number:
                         data += [pack]
@@ -85,25 +89,21 @@ def receive_data(sock, queue=b'', resolution=(640, 480)):
             data.sort(key=lambda data_item: struct.unpack('i', data_item[8:12])[0])
 
             image = b''
+            error_key = 0
             index_should_be = 0
             for i in range(len(data)):
                 data_index = struct.unpack('i', data[i][8:12])[0]
                 if data_index - index_should_be > 0:
-                    # image += b'\x00' * (data_index - index_should_be) * CHUNK_SIZE
-                    # index_should_be += data_index - index_should_be
-                    log.warning("file corrupted")
-                    time.sleep(0)
-                    continue
+                    error_key = 1
+                    break
 
                 image += data[i][12:]
                 index_should_be += 1
 
-            if struct.unpack('i', data[0][:4])[0] - len(image) > 0:
+            if struct.unpack('i', data[0][:4])[0] - len(image) > 0 or error_key:
                 log.warning("file corrupted")
                 time.sleep(0)
                 continue
-
-            # image += b'\x00' * (struct.unpack('i', data[0][:4])[0] - len(image))
 
             try:
                 buffer = BytesIO()
